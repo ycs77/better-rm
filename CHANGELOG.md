@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Permanently remove `.next`, `.nuxt`, and `.astro`, plus `node_modules` or `vendor` when a corresponding package-manager lockfile exists in the same parent directory, instead of hashing and moving them to trash.
+
 ## [1.7.1] - 2026-09-26
 
 ### Fixed

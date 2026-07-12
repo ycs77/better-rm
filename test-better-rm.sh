@@ -779,8 +779,182 @@ else
 fi
 
 # ============================================================================
+# 測試 15: 可重建目錄永久刪除規則 (Test 15: Rebuildable Directory Permanent Deletion Rules)
+# ============================================================================
+test_title "測試 15: 可重建目錄永久刪除規則"
+
+setup
+cd "$TEST_WORK_DIR"
+
+test_item "內建可重建目錄在符合條件時皆永久刪除"
+rebuildable_ok=1
+touch package-lock.json composer.lock
+for dir in node_modules vendor .next .nuxt .astro; do
+    mkdir -p "$dir/subdir"
+    echo "content" > "$dir/subdir/file.txt"
+    output=$("$BETTER_RM" -rf "$dir" 2>&1)
+    if [ -e "$dir" ] || verify_in_trash "$dir" || ! echo "$output" | grep -q "無法還原"; then
+        rebuildable_ok=0
+    fi
+done
+if [ "$rebuildable_ok" = "1" ] && [ ! -f "$TEST_TRASH_DIR/.deletion_log" ]; then
+    test_pass "內建可重建目錄永久刪除且未寫入垃圾桶或日誌"
+else
+    test_fail "部分可重建目錄未依規則永久刪除"
+fi
+
+test_item "node_modules 支援所有指定的 JavaScript lock 檔"
+javascript_locks_ok=1
+for lock_file in package-lock.json yarn.lock pnpm-lock.yaml bun.lock; do
+    setup
+    cd "$TEST_WORK_DIR"
+    touch "$lock_file"
+    mkdir node_modules
+    "$BETTER_RM" -rf node_modules >/dev/null 2>&1
+    if [ -e node_modules ] || verify_in_trash "node_modules"; then
+        javascript_locks_ok=0
+    fi
+done
+if [ "$javascript_locks_ok" = "1" ]; then
+    test_pass "所有 JavaScript lock 檔皆可啟用永久刪除"
+else
+    test_fail "部分 JavaScript lock 檔未啟用永久刪除"
+fi
+
+test_item "不接受祖先目錄中的 lock 檔"
+setup
+cd "$TEST_WORK_DIR"
+touch pnpm-lock.yaml
+mkdir -p packages/app/node_modules
+"$BETTER_RM" -rf packages/app/node_modules >/dev/null 2>&1
+if verify_in_trash "node_modules"; then
+    test_pass "只檢查依賴目錄同層的 lock 檔"
+else
+    test_fail "祖先目錄的 lock 檔錯誤啟用永久刪除"
+fi
+
+test_item "缺少對應 lock 檔時移入垃圾桶"
+setup
+cd "$TEST_WORK_DIR"
+mkdir node_modules vendor
+"$BETTER_RM" -r node_modules vendor >/dev/null 2>&1
+if verify_in_trash "node_modules" && verify_in_trash "vendor"; then
+    test_pass "缺少 lock 檔時安全退回垃圾桶"
+else
+    test_fail "缺少 lock 檔時未移入垃圾桶"
+fi
+
+test_item "不相符的 lock 檔不啟用永久刪除"
+setup
+cd "$TEST_WORK_DIR"
+touch composer.lock
+mkdir node_modules
+"$BETTER_RM" -r node_modules >/dev/null 2>&1
+/bin/rm -f -- composer.lock
+touch package-lock.json
+mkdir vendor
+"$BETTER_RM" -r vendor >/dev/null 2>&1
+if verify_in_trash "node_modules" && verify_in_trash "vendor"; then
+    test_pass "依賴目錄只接受各自對應的 lock 檔"
+else
+    test_fail "不相符的 lock 檔錯誤啟用永久刪除"
+fi
+
+test_item ".cache、dist 與 build 維持移入垃圾桶"
+setup
+cd "$TEST_WORK_DIR"
+mkdir .cache dist build
+"$BETTER_RM" -r .cache dist build >/dev/null 2>&1
+if verify_in_trash ".cache" && verify_in_trash "dist" && verify_in_trash "build"; then
+    test_pass ".cache、dist 與 build 不套用永久刪除"
+else
+    test_fail ".cache、dist 或 build 被錯誤永久刪除"
+fi
+
+setup
+cd "$TEST_WORK_DIR"
+touch package-lock.json composer.lock
+
+test_item "規則採名稱精確且區分大小寫比對"
+mkdir -p node_modules_backup Vendor
+"$BETTER_RM" -r node_modules_backup >/dev/null 2>&1
+"$BETTER_RM" -r Vendor >/dev/null 2>&1
+if verify_in_trash "node_modules_backup" && verify_in_trash "Vendor"; then
+    test_pass "近似名稱仍移入垃圾桶"
+else
+    test_fail "近似名稱被錯誤套用永久刪除規則"
+fi
+
+test_item "不掃描普通目錄內的可重建子目錄"
+mkdir -p project/node_modules
+echo "dependency" > project/node_modules/file.txt
+"$BETTER_RM" -r project >/dev/null 2>&1
+if verify_in_trash "project"; then
+    test_pass "外層普通目錄完整移入垃圾桶"
+else
+    test_fail "外層普通目錄未移入垃圾桶"
+fi
+
+test_item "可重建名稱的符號連結仍移入垃圾桶"
+mkdir dependency-target
+ln -s dependency-target node_modules
+"$BETTER_RM" node_modules >/dev/null 2>&1
+if [ -d dependency-target ] && verify_in_trash "node_modules"; then
+    test_pass "只移動符號連結並保留目標"
+else
+    test_fail "可重建名稱的符號連結處理錯誤"
+fi
+
+test_item "未提供 -r 時拒絕刪除可重建目錄"
+mkdir vendor
+if "$BETTER_RM" vendor >/dev/null 2>&1 || [ ! -d vendor ]; then
+    test_fail "未提供 -r 卻刪除了可重建目錄"
+else
+    test_pass "未提供 -r 時正確拒絕刪除"
+fi
+/bin/rm -rf -- vendor
+
+test_item "-i 拒絕時保留、確認時永久刪除"
+mkdir node_modules
+interactive_prompt=$(printf 'n\n' | "$BETTER_RM" -ri node_modules 2>&1)
+interactive_ok=0
+if [ -d node_modules ] && echo "$interactive_prompt" | grep -q "cannot be restored"; then
+    printf 'y\n' | "$BETTER_RM" -ri node_modules >/dev/null 2>&1
+    [ ! -e node_modules ] && interactive_ok=1
+fi
+if [ "$interactive_ok" = "1" ]; then
+    test_pass "-i 在永久刪除前顯示不可還原提示"
+else
+    test_fail "-i 未清楚提示永久刪除或確認流程不正確"
+fi
+
+test_item "-f 仍顯示安全警告，-v 額外顯示成功訊息"
+mkdir .astro
+force_output=$("$BETTER_RM" -rf .astro 2>&1)
+mkdir .nuxt
+verbose_output=$("$BETTER_RM" -rfv .nuxt 2>&1)
+if echo "$force_output" | grep -q "無法還原" && \
+   echo "$verbose_output" | grep -q "無法還原" && \
+   echo "$verbose_output" | grep -q "已永久移除"; then
+    test_pass "安全警告與 verbose 輸出正確"
+else
+    test_fail "安全警告或 verbose 輸出缺失"
+fi
+
+test_item "多目標混合使用垃圾桶與永久刪除流程"
+echo "regular" > regular.txt
+mkdir .next
+if "$BETTER_RM" -rf regular.txt .next >/dev/null 2>&1 && \
+   verify_in_trash "regular.txt" && [ ! -e .next ] && ! verify_in_trash ".next"; then
+    test_pass "混合目標採用各自正確的刪除流程"
+else
+    test_fail "混合目標刪除流程錯誤"
+fi
+
+# ============================================================================
 # 測試結果統計 (Test Results Summary)
 # ============================================================================
+
 cleanup
 
 echo ""

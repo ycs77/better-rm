@@ -60,6 +60,16 @@ PROTECTED_PATTERNS=(
     "*/.git/"
 )
 
+# 可安全重建且不需要移入垃圾桶的目錄名稱
+# Rebuildable directory names that do not need to be moved to trash
+REBUILDABLE_DIRS=(
+    "node_modules"
+    "vendor"
+    ".next"
+    ".nuxt"
+    ".astro"
+)
+
 # 顏色定義 (Color definitions)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -277,6 +287,85 @@ is_protected() {
     return 1  # 不是受保護的目錄
 }
 
+# 檢查目標是否為名稱精確符合的可重建實體目錄
+# Check whether the target is a real rebuildable directory with an exact name match
+is_rebuildable_dir() {
+    local path="$1"
+    local dir_name
+
+    [ -d "$path" ] && [ ! -L "$path" ] || return 1
+    dir_name=$(basename -- "${path%/}")
+
+    local rebuildable
+    for rebuildable in "${REBUILDABLE_DIRS[@]}"; do
+        if [ "$dir_name" = "$rebuildable" ]; then
+            case "$dir_name" in
+                node_modules)
+                    has_dependency_lock "$path" package-lock.json yarn.lock pnpm-lock.yaml bun.lock
+                    return $?
+                    ;;
+                vendor)
+                    has_dependency_lock "$path" composer.lock
+                    return $?
+                    ;;
+                *)
+                    return 0
+                    ;;
+            esac
+        fi
+    done
+
+    return 1
+}
+
+# 僅在目標的直接父目錄尋找可重建依賴所需的 lock 檔案
+# Search only the target's direct parent for a lockfile required to rebuild dependencies
+has_dependency_lock() {
+    local path="$1"
+    shift
+    local parent_dir
+    parent_dir=$(cd "$(dirname -- "$path")" 2>/dev/null && pwd -P) || return 1
+
+    local lock_file
+    for lock_file in "$@"; do
+        if [ -f "$parent_dir/$lock_file" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# 永久刪除可重建目錄
+# Permanently remove a rebuildable directory
+remove_rebuildable_dir() {
+    local source="$1"
+    local verbose="$2"
+
+    # 永久刪除仍必須通過既有的重要路徑保護
+    # Permanent deletion must still pass the existing protected-path checks
+    if is_protected "$source"; then
+        error_msg "拒絕刪除受保護的目錄: '$source'"
+        error_msg "Refused to remove protected directory: '$source'"
+        error_msg "這是一個重要的系統目錄或專案目錄！"
+        error_msg "This is a critical system or project directory!"
+        return 1
+    fi
+
+    if /bin/rm -rf -- "$source"; then
+        warn_msg "'$source' 符合可重建目錄規則，已永久刪除且未移入垃圾桶（無法還原）"
+        warn_msg "'$source' matched a rebuildable directory rule and was permanently removed without being moved to trash (cannot be restored)"
+        if [ "$verbose" = "1" ]; then
+            success_msg "已永久移除可重建目錄 '$source' (permanently removed rebuildable directory)"
+        fi
+        return 0
+    fi
+
+    error_msg "無法永久移除可重建目錄 '$source'"
+    error_msg "Failed to permanently remove rebuildable directory '$source'"
+    return 1
+}
+
 # 顯示使用說明
 # Display usage information
 show_help() {
@@ -312,6 +401,11 @@ A safer alternative to the rm command
   
   This command moves files to trash instead of permanent deletion.
   Trash is located at $TRASH_DIR directory.
+
+  .next、.nuxt、.astro，以及能在同層找到對應 lock 檔案的 node_modules 或
+  vendor 實體目錄會被永久刪除，且無法還原。
+  Real .next, .nuxt, and .astro directories, plus node_modules or vendor with a
+  matching lockfile in the same parent, are permanently removed and cannot be restored.
 
 範例 (Examples):
   rm file.txt                    # 刪除單一檔案
@@ -1053,6 +1147,8 @@ main() {
     # Process each file
     local status=0
     for file in "${files[@]}"; do
+        local rebuildable_match=0
+
         # 檢查是否為目錄
         # Check if it's a directory
         if [ -d "$file" ] && [ ! -L "$file" ]; then
@@ -1063,12 +1159,18 @@ main() {
                 continue
             fi
         fi
+
+        if is_rebuildable_dir "$file"; then
+            rebuildable_match=1
+        fi
         
         # 互動式確認
         # Interactive confirmation
         if [ "$interactive" = "1" ]; then
             local prompt
-            if [ -d "$file" ] && [ ! -L "$file" ]; then
+            if [ "$rebuildable_match" = "1" ]; then
+                prompt="rm: permanently remove rebuildable directory '$file' (cannot be restored)? "
+            elif [ -d "$file" ] && [ ! -L "$file" ]; then
                 prompt="rm: descend into directory '$file'? "
             else
                 prompt="rm: remove file '$file'? "
@@ -1080,9 +1182,13 @@ main() {
             fi
         fi
         
-        # 移動到垃圾桶
-        # Move to trash
-        if ! move_to_trash "$file" "$verbose"; then
+        # 可重建目錄直接永久刪除；其他目標移動到垃圾桶
+        # Permanently remove rebuildable directories; move all other targets to trash
+        if [ "$rebuildable_match" = "1" ]; then
+            if ! remove_rebuildable_dir "$file" "$verbose"; then
+                status=1
+            fi
+        elif ! move_to_trash "$file" "$verbose"; then
             status=1
         fi
     done
