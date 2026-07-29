@@ -22,13 +22,13 @@
 只需一行命令即可自動安裝：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/doggy8088/better-rm/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ycs77/better-rm/main/install.sh | bash
 ```
 
 或使用 wget：
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/doggy8088/better-rm/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/ycs77/better-rm/main/install.sh | bash
 ```
 
 安裝腳本會自動：
@@ -60,7 +60,7 @@ rm --version
 1. 複製專案到本地目錄：
 
 ```bash
-git clone https://github.com/doggy8088/better-rm.git ~/.better-rm
+git clone https://github.com/ycs77/better-rm.git ~/.better-rm
 ```
 
 2. 設定別名，在 `~/.bashrc` 或 `~/.zshrc` 中加入以下內容：
@@ -92,7 +92,7 @@ rm --version
 
 ```bash
 # 下載專案
-git clone https://github.com/doggy8088/better-rm.git
+git clone https://github.com/ycs77/better-rm.git
 cd better-rm
 
 # 複製到 /usr/local/bin（需要 sudo 權限）
@@ -370,13 +370,13 @@ hooks 執行時需要 `node` 可用。Codex 還會要求使用者透過 `/hooks`
 推薦用一行指令（自動抓取最新 Release）：
 
 ```bash
-curl -sSL https://github.com/doggy8088/better-rm/releases/latest/download/install-hooks.sh | bash -s -- -a claude
+curl -sSL https://github.com/ycs77/better-rm/releases/latest/download/install-hooks.sh | bash -s -- -a claude
 ```
 
 如果有需要全域安裝 Claude 設定：
 
 ```bash
-curl -sSL https://github.com/doggy8088/better-rm/releases/latest/download/install-hooks.sh | bash -s -- -a claude --global
+curl -sSL https://github.com/ycs77/better-rm/releases/latest/download/install-hooks.sh | bash -s -- -a claude --global
 ```
 
 使用 `-a` 或 `--agent` 指定 Agent；預設會安裝到目前目錄所屬 Git 專案的對應設定檔：

@@ -3,9 +3,9 @@
 # better-rm 安裝腳本 / Installation script for better-rm
 # 
 # 用法 (Usage):
-#   curl -sSL https://raw.githubusercontent.com/doggy8088/better-rm/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/ycs77/better-rm/main/install.sh | bash
 #   或 (or):
-#   wget -qO- https://raw.githubusercontent.com/doggy8088/better-rm/main/install.sh | bash
+#   wget -qO- https://raw.githubusercontent.com/ycs77/better-rm/main/install.sh | bash
 #
 
 set -e  # 遇到錯誤時立即退出 / Exit on error
@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 # 安裝目錄 (Installation directory)
 INSTALL_DIR="$HOME/.better-rm"
-REPO_URL="https://github.com/doggy8088/better-rm.git"
+REPO_URL="https://github.com/ycs77/better-rm.git"
 
 # 輸出函式 (Output functions)
 info() {
